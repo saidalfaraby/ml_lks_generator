@@ -1,209 +1,246 @@
 import streamlit as st
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import re
 
-# -----------------------------------------
-# KONFIGURASI DAN DATASET
-# -----------------------------------------
-st.set_page_config(page_title="Validasi LKS Naive Bayes", layout="wide")
+st.set_page_config(page_title="Regression Interactive LKS", layout="wide")
 
-@st.cache_data
-def load_data():
-    data = {
-        "Battery": ["High", "Medium", "Low", "High", "Medium", "High", "Low", "Medium", "High", "Medium", "High", "Low", "Medium", "High", "Low"],
-        "RAM": ["8GB", "4GB", "2GB", "8GB", "4GB", "8GB", "2GB", "4GB", "8GB", "2GB", "4GB", "2GB", "8GB", "4GB", "2GB"],
-        "Storage": ["128GB", "64GB", "32GB", "128GB", "64GB", "64GB", "32GB", "128GB", "128GB", "32GB", "64GB", "64GB", "128GB", "128GB", "32GB"],
-        "Camera": ["16MP", "12MP", "8MP", "16MP", "8MP", "12MP", "8MP", "12MP", "16MP", "8MP", "12MP", "8MP", "16MP", "12MP", "8MP"],
-        "Price": ["Expensive", "Medium", "Cheap", "Medium", "Cheap", "Expensive", "Cheap", "Medium", "Expensive", "Cheap", "Medium", "Cheap", "Expensive", "Medium", "Cheap"],
-        "Recommend": ["Yes", "Yes", "No", "Yes", "No", "Yes", "No", "Yes", "Yes", "No", "Yes", "No", "Yes", "Yes", "No"]
-    }
-    return pd.DataFrame(data)
+# ==========================================
+# FUNGSI PEMBANGKIT DATA BERDASARKAN NIM
+# ==========================================
+def get_seed_from_nim(nim_string):
+    """Mengekstrak angka dari NIM untuk dijadikan seed Numpy"""
+    numbers = re.sub(r'\D', '', str(nim_string))
+    if numbers:
+        # Memastikan seed masuk dalam batas integer 32-bit yang diterima numpy
+        return int(numbers) % (2**32 - 1)
+    return 42 # Default seed jika NIM kosong/tidak valid
 
-df = load_data()
-total_data = len(df)
-count_yes = len(df[df['Recommend'] == 'Yes'])
-count_no = len(df[df['Recommend'] == 'No'])
+st.sidebar.title("Data Mahasiswa")
+nim_input = st.sidebar.text_input("Masukkan NIM Anda:", "12345678")
+student_seed = get_seed_from_nim(nim_input)
 
-# -----------------------------------------
-# HELPER FUNGSI VALIDASI
-# -----------------------------------------
-def check_fraction_or_decimal(user_input, correct_value, tolerance=0.01):
-    """Memeriksa input user apakah benar (mendukung desimal dan pecahan)."""
-    user_input = user_input.strip()
-    if not user_input:
-        return None
-    try:
-        if "/" in user_input:
-            num, den = user_input.split("/")
-            val = float(num) / float(den)
+st.sidebar.markdown("---")
+st.sidebar.title("Modul Regresi")
+modul = st.sidebar.radio("Pilih Modul Pembelajaran:", 
+                         ["1. Univariate Visualizer", "2. Matrix Engine (Multivariate)", "3. Logistic Explorer"])
+
+# Main Title
+st.title("Interactive Machine Learning Worksheet")
+st.caption(f"Dataset dikunci menggunakan Seed NIM: {nim_input}")
+
+# ==========================================
+# MODUL 1: Univariate Visualizer
+# ==========================================
+if modul == "1. Univariate Visualizer":
+    st.header("Modul 1: Univariate Linear Regression")
+    
+    # Generate Data Unique to NIM
+    np.random.seed(student_seed)
+    # Trik Pedagogis: X dibuat tetap dan simetris agar rata-rata X bulat (6) dan varians bulat (40)
+    # Ini sangat memudahkan perhitungan manual mahasiswa di atas kertas.
+    X = np.array([2, 4, 6, 8, 10]) 
+    
+    # Y digenerate acak berdasarkan NIM, berupa integer
+    noise = np.random.randint(-15, 16, 5)
+    w_true = np.random.randint(3, 8)
+    a_true = np.random.randint(20, 40)
+    y = w_true * X + a_true + noise
+    y = np.clip(y, 10, 100) # Pastikan nilai ujian masuk akal (10-100)
+    
+    st.info("👇 **SALIN DATA INI KE LKS ANDA (BAGIAN 1)** 👇")
+    df_univ = pd.DataFrame({"Jam Belajar (X)": X, "Nilai Ujian (Y)": y})
+    # Tampilkan tabel secara horizontal agar hemat tempat
+    st.dataframe(df_univ.T)
+    
+    st.markdown("---")
+    st.write("Setelah menghitung manual, masukkan nilai bobot (w) dan bias (a) Anda di bawah ini untuk melihat garis *Best Fit* dan nilai Error.")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Input Parameter Manual")
+        w_input = st.number_input("Masukkan nilai bobot (w):", value=0.00, step=0.10)
+        a_input = st.number_input("Masukkan nilai bias (a):", value=0.00, step=1.00)
+        
+        # Calculate Pred and SSE
+        y_pred = w_input * X + a_input
+        sse = np.sum((y - y_pred)**2)
+        
+        st.metric(label="Sum Square Error (SSE)", value=round(sse, 2))
+        if w_input == 0 and a_input == 0:
+            st.warning("Masukkan nilai w dan a hasil hitungan Anda.")
         else:
-            val = float(user_input)
-        return abs(val - correct_value) <= tolerance
-    except ValueError:
-        return False
+            st.success("Bandingkan nilai SSE ini. Cobalah ubah angka w dan a sedikit saja, apakah SSE membesar?")
 
-def show_feedback(is_correct):
-    if is_correct is None:
-        return ""
-    return "✅ Benar!" if is_correct else "❌ Kurang Tepat"
+    with col2:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.scatter(X, y, color='blue', s=100, label='Data Aktual')
+        
+        # Plot garis
+        x_line = np.linspace(0, 12, 100)
+        y_line = w_input * x_line + a_input
+        ax.plot(x_line, y_line, color='orange', linewidth=2, label=f'Model: y = {w_input:.2f}x + {a_input:.2f}')
+        
+        # Plot error lines (residuals)
+        for i in range(len(X)):
+            ax.plot([X[i], X[i]], [y[i], y_pred[i]], color='red', linestyle='--', alpha=0.5)
+            
+        ax.set_xlabel('Jam Belajar')
+        ax.set_ylabel('Nilai Ujian')
+        ax.set_xlim(0, 12)
+        ax.set_ylim(0, 110)
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.6)
+        st.pyplot(fig)
 
-# FUNGSI CPT DENGAN LAPLACE SMOOTHING
-def calculate_cpt_laplace(feature, value, target_class, k=3, alpha=1):
-    subset = df[df['Recommend'] == target_class]
-    count_val = len(subset[subset[feature] == value])
-    total_class = len(subset)
-    # Rumus Laplace: (count + alpha) / (total + k * alpha)
-    return (count_val + alpha) / (total_class + (k * alpha))
-
-# -----------------------------------------
-# TAMPILAN UTAMA
-# -----------------------------------------
-st.title("📱 Validasi LKS: Smartphone Recommendation")
-st.markdown("Aplikasi ini dibuat untuk mencocokkan hasil perhitungan mandiri algoritma **Naive Bayes**.")
-
-with st.expander("Tampilkan Dataset Training"):
-    st.dataframe(df, use_container_width=True)
-
-# Membuat Tab untuk setiap tugas
-tab1, tab2, tab3 = st.tabs(["Tugas 1: Prior Probability", "Tugas 2: CPT (Laplace)", "Tugas 3: Prediksi Data Baru"])
-
-# --- TAB 1: PRIOR PROBABILITY ---
-with tab1:
-    st.header("Tugas 1 — Hitung Prior Probability")
-    st.markdown("Masukkan jawaban dalam bentuk pecahan (contoh: **9/15**) atau desimal (contoh: **0.6**).")
+# ==========================================
+# MODUL 2: Matrix Engine (Multivariate)
+# ==========================================
+elif modul == "2. Matrix Engine (Multivariate)":
+    st.header("Modul 2: Linear Regression Matrix Engine")
+    
+    # Generate Data Unique to NIM
+    np.random.seed(student_seed + 1) # +1 agar beda dari modul 1
+    X1 = np.random.choice(range(2, 10), 3, replace=False)
+    X2 = np.random.randint(1, 6, 3)
+    Y_multi = (3 * X1) + (4 * X2) + np.random.randint(20, 40, 3)
+    
+    st.info("👇 **SALIN DATA INI KE LKS ANDA (BAGIAN 2)** 👇")
+    df_multi = pd.DataFrame({
+        "Jam Belajar (X1)": X1, 
+        "Jumlah Latihan Soal (X2)": X2, 
+        "Nilai Ujian (Y)": Y_multi
+    })
+    st.table(df_multi)
+    
+    st.markdown("---")
+    st.write("Susun Matriks X (jangan lupa kolom angka 1 untuk bias) dan Vektor Y di kertas Anda, lalu ketikkan ke dalam form di bawah ini.")
     
     col1, col2 = st.columns(2)
     with col1:
-        ans_yes = st.text_input("P(Yes) =")
-        val_yes = check_fraction_or_decimal(ans_yes, count_yes / total_data)
-        st.markdown(show_feedback(val_yes))
+        st.subheader("Matriks X")
+        st.caption("Contoh format baris pertama: 1, 4, 2")
+        X_str = st.text_area("Input Matriks X (Gunakan koma sebagai pemisah):", height=120)
         
     with col2:
-        ans_no = st.text_input("P(No) =")
-        val_no = check_fraction_or_decimal(ans_no, count_no / total_data)
-        st.markdown(show_feedback(val_no))
-
-# --- TAB 2: CPT (SEKARANG DENGAN LAPLACE SMOOTHING) ---
-with tab2:
-    st.header("Tugas 2 — Lengkapi Conditional Probability Table (CPT) dengan Laplace Smoothing (α=1)")
-    st.info("Gunakan rumus Laplace Smoothing. Input dapat berupa pecahan (misal: 7/12) atau desimal (misal: 0.58).")
-    
-    features = {
-        "Battery": ["High", "Medium", "Low"],
-        "RAM": ["8GB", "4GB", "2GB"],
-        "Storage": ["128GB", "64GB", "32GB"],
-        "Camera": ["16MP", "12MP", "8MP"],
-        "Price": ["Expensive", "Medium", "Cheap"]
-    }
-    
-    for feat, values in features.items():
-        st.subheader(f"Feature: {feat}")
-        cols = st.columns(3)
-        cols[0].markdown(f"**{feat}**")
-        cols[1].markdown("**P( ... | Yes )**")
-        cols[2].markdown("**P( ... | No )**")
+        st.subheader("Vektor Y")
+        st.caption("Contoh: 75")
+        y_str = st.text_area("Input Vektor Y:", height=120)
         
-        for val in values:
-            c = st.columns(3)
-            c[0].markdown(f"*{val}*")
-            
-            # Input untuk Yes (Laplace)
-            ans_y = c[1].text_input(f"P({val}|Yes)", key=f"{feat}_{val}_yes", label_visibility="collapsed", placeholder="misal: 7/12")
-            correct_y = calculate_cpt_laplace(feat, val, "Yes")
-            is_corr_y = check_fraction_or_decimal(ans_y, correct_y, tolerance=0.01)
-            if is_corr_y is not None:
-                c[1].markdown(show_feedback(is_corr_y))
+    if st.button("Hitung Invers & Bobot Matriks", type="primary"):
+        if not X_str or not y_str:
+            st.error("Harap isi kedua matriks terlebih dahulu!")
+        else:
+            try:
+                # Parse inputs
+                X_mat = np.array([list(map(float, row.split(','))) for row in X_str.strip().split('\n')])
+                y_vec = np.array([[float(val)] for val in y_str.strip().split('\n')])
                 
-            # Input untuk No (Laplace)
-            ans_n = c[2].text_input(f"P({val}|No)", key=f"{feat}_{val}_no", label_visibility="collapsed", placeholder="misal: 1/9")
-            correct_n = calculate_cpt_laplace(feat, val, "No")
-            is_corr_n = check_fraction_or_decimal(ans_n, correct_n, tolerance=0.01)
-            if is_corr_n is not None:
-                c[2].markdown(show_feedback(is_corr_n))
-        st.divider()
+                st.write("---")
+                st.subheader("Langkah-langkah Komputasi Matriks:")
+                
+                # Step 1: X^T
+                X_T = X_mat.T
+                st.write("**1. Transpose Matriks ($X^T$):**")
+                st.write(np.round(X_T, 4))
+                
+                # Step 2: X^T * X
+                XTX = np.dot(X_T, X_mat)
+                st.write("**2. Perkalian ($X^T X$):**")
+                st.write(np.round(XTX, 4))
+                
+                # Step 3: Invers (X^T * X)^-1
+                XTX_inv = np.linalg.inv(XTX)
+                st.write("**3. Matriks Invers $(X^T X)^{-1}$:**")
+                st.write(np.round(XTX_inv, 4))
+                
+                # Step 4: Final weights
+                XTy = np.dot(X_T, y_vec)
+                w = np.dot(XTX_inv, XTy)
+                
+                st.success("**4. Hasil Akhir Vektor Bobot (w):**")
+                st.write(np.round(w, 4))
+                st.info("Salin nilai w ini ke LKS Anda untuk memprediksi data testing secara manual!")
+                
+            except Exception as e:
+                st.error("Terjadi kesalahan format input. Pastikan Anda hanya menggunakan angka dan koma, serta baris X dan Y sejajar jumlahnya.")
 
-# --- TAB 3: PREDIKSI (LAPLACE SMOOTHING) ---
-with tab3:
-    st.header("Tugas 3 — Prediksi Data Baru dengan Laplace Smoothing (α=1)")
-    st.markdown("Gunakan hasil perkalian dari nilai CPT Laplace yang sudah Anda hitung di Tugas 2.")
+# ==========================================
+# MODUL 3: Logistic Explorer
+# ==========================================
+elif modul == "3. Logistic Explorer":
+    st.header("Modul 3: Logistic Regression Explorer")
     
-    def calc_posteriors(x_dict):
-        # Prior Probabilities
-        p_yes = count_yes / total_data
-        p_no = count_no / total_data
+    # Generate Data Unique to NIM
+    np.random.seed(student_seed + 2)
+    # Generate 10 random hours between 1 and 15
+    X_log = np.sort(np.random.choice(range(1, 16), 10, replace=False))
+    
+    # Generate 0s and 1s with a random threshold based on NIM
+    random_threshold = np.random.randint(6, 10)
+    # Give some random overlaps so it's not a perfectly clean cut
+    y_log = np.where(X_log + np.random.randint(-2, 3, 10) >= random_threshold, 1, 0)
+    
+    st.info("👇 **DATA AKTUAL ANDA (Tergambar Otomatis di Plot)** 👇")
+    df_log = pd.DataFrame({"Jam Belajar (X)": X_log, "Status Lulus (Y)": y_log})
+    st.dataframe(df_log.T)
+    
+    st.markdown("---")
+    st.write("Eksplorasi secara visual bagaimana parameter $w$ dan $a$ mengubah bentuk kurva Sigmoid. Geser slider hingga **Cost (Log Loss)** sekecil mungkin.")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Parameter Tuning")
+        w_log = st.slider("Bobot (w)", min_value=-3.0, max_value=3.0, value=0.0, step=0.1)
+        a_log = st.slider("Bias (a)", min_value=-15.0, max_value=15.0, value=0.0, step=0.5)
         
-        prob_yes = p_yes
-        prob_no = p_no
-        for feat, val in x_dict.items():
-            prob_yes *= calculate_cpt_laplace(feat, val, "Yes")
-            prob_no *= calculate_cpt_laplace(feat, val, "No")
-            
-        return prob_yes, prob_no
-
-    # Tingkat toleransi ketat karena perkalian desimal menghasilkan nilai yang sangat kecil
-    TOLERANCE_LAPLACE = 0.0005
-
-    # ==========================================
-    # DATA UJI 1
-    # ==========================================
-    st.subheader("Data Uji 1")
-    st.code("X_1 = (Medium, 4GB, 64GB, 8MP, Medium)")
-    
-    x1_data = {"Battery": "Medium", "RAM": "4GB", "Storage": "64GB", "Camera": "8MP", "Price": "Medium"}
-    true_y1, true_n1 = calc_posteriors(x1_data)
-    true_pred1 = "Yes" if true_y1 > true_n1 else "No"
-
-    st.markdown("**1. Hitung Nilai Probabilitas Akhir (Posterior)**")
-    col1_1, col2_1 = st.columns(2)
-    
-    with col1_1:
-        ans_y1 = st.text_input("Nilai P(Yes | X_1):", key="ans_y1", placeholder="Contoh: 0.0012")
-        val_y1 = check_fraction_or_decimal(ans_y1, true_y1, tolerance=TOLERANCE_LAPLACE)
-        st.markdown(show_feedback(val_y1))
+        # Calculate probabilities and Cost
+        v = w_log * X_log + a_log
+        preds = 1 / (1 + np.exp(-v))
         
-    with col2_1:
-        ans_n1 = st.text_input("Nilai P(No | X_1):", key="ans_n1", placeholder="Contoh: 0.0034")
-        val_n1 = check_fraction_or_decimal(ans_n1, true_n1, tolerance=TOLERANCE_LAPLACE)
-        st.markdown(show_feedback(val_n1))
-
-    st.markdown("**2. Tentukan Hasil Prediksi**")
-    pred1_ans = st.radio("Pilih Prediksi X_1:", ["Pilih Jawaban", "Yes", "No"], key="pred1")
-    
-    if pred1_ans != "Pilih Jawaban":
-        if pred1_ans == true_pred1:
-            st.success(f"✅ Prediksi Benar! Kelas untuk X_1 adalah {true_pred1}")
-        else:
-            st.error("❌ Salah. Bandingkan kembali nilai P(Yes) dan P(No) yang sudah Anda hitung.")
-
-    st.divider()
-
-    # ==========================================
-    # DATA UJI 2
-    # ==========================================
-    st.subheader("Data Uji 2")
-    st.code("X_2 = (Low, 4GB, 128GB, 8MP, Expensive)")
-    
-    x2_data = {"Battery": "Low", "RAM": "4GB", "Storage": "128GB", "Camera": "8MP", "Price": "Expensive"}
-    true_y2, true_n2 = calc_posteriors(x2_data)
-    true_pred2 = "Yes" if true_y2 > true_n2 else "No"
-
-    st.markdown("**1. Hitung Nilai Probabilitas Akhir (Posterior)**")
-    col1_2, col2_2 = st.columns(2)
-    
-    with col1_2:
-        ans_y2 = st.text_input("Nilai P(Yes | X_2):", key="ans_y2", placeholder="Contoh: 0.0012")
-        val_y2 = check_fraction_or_decimal(ans_y2, true_y2, tolerance=TOLERANCE_LAPLACE)
-        st.markdown(show_feedback(val_y2))
+        # Log Loss calculation (Cost function)
+        epsilon = 1e-15 # prevent log(0)
+        preds_clipped = np.clip(preds, epsilon, 1 - epsilon)
+        cost = -np.mean(y_log * np.log(preds_clipped) + (1 - y_log) * np.log(1 - preds_clipped))
         
-    with col2_2:
-        ans_n2 = st.text_input("Nilai P(No | X_2):", key="ans_n2", placeholder="Contoh: 0.0034")
-        val_n2 = check_fraction_or_decimal(ans_n2, true_n2, tolerance=TOLERANCE_LAPLACE)
-        st.markdown(show_feedback(val_n2))
+        st.metric(label="Cost (Log Loss)", value=round(cost, 4))
+        
+        if cost < 0.4:
+            st.success("Tepat Sekali! Kurva pemisah sudah cukup optimal. Salin nilai w dan a ini ke LKS Anda.")
+        
+    with col2:
+        fig2, ax2 = plt.subplots(figsize=(8, 5))
+        
+        # Plot scatter data
+        # Warna dibedakan antara lulus dan tidak
+        colors = ['red' if y == 0 else 'blue' for y in y_log]
+        ax2.scatter(X_log, y_log, color=colors, s=150, edgecolor='black', zorder=5)
+        
+        # Plot sigmoid curve
+        x_curve = np.linspace(0, 16, 200)
+        v_curve = w_log * x_curve + a_log
+        y_curve = 1 / (1 + np.exp(-v_curve))
+        
+        ax2.plot(x_curve, y_curve, color='green', linewidth=3, label=f'Sigmoid')
+        
+        # Threshold line
+        ax2.axhline(y=0.5, color='gray', linestyle='--', alpha=0.7, label='Threshold (0.5)')
+        
+        ax2.set_xlabel('Jam Belajar')
+        ax2.set_ylabel('Probabilitas Lulus')
+        ax2.set_xlim(0, 16)
+        ax2.set_ylim(-0.1, 1.1)
+        ax2.set_yticks([0, 0.5, 1])
+        ax2.set_yticklabels(['0 (Gagal)', '0.5', '1 (Lulus)'])
+        ax2.legend(loc='center right')
+        ax2.grid(True, linestyle='--', alpha=0.4)
+        st.pyplot(fig2)
 
-    st.markdown("**2. Tentukan Hasil Prediksi**")
-    pred2_ans = st.radio("Pilih Prediksi X_2:", ["Pilih Jawaban", "Yes", "No"], key="pred2")
-    
-    if pred2_ans != "Pilih Jawaban":
-        if pred2_ans == true_pred2:
-            st.success(f"✅ Prediksi Benar! Kelas untuk X_2 adalah {true_pred2}")
-        else:
-            st.error("❌ Salah. Bandingkan kembali nilai P(Yes) dan P(No) yang sudah Anda hitung.")
+# ==========================================
+# FOOTER / CREDIT
+# ==========================================
+st.markdown("---")
+st.caption("Developed by Farrel")
