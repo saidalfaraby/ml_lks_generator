@@ -1,246 +1,160 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import re
+import numpy as np
 
-st.set_page_config(page_title="Regression Interactive LKS", layout="wide")
+st.set_page_config(page_title="Validasi LKS K-Means", layout="wide")
+st.title("Validasi LKS: K-Means Clustering")
+st.markdown("Masukkan hasil perhitungan manual Anda ke dalam tabel dan form di bawah ini untuk memvalidasi kebenarannya.")
 
-# ==========================================
-# FUNGSI PEMBANGKIT DATA BERDASARKAN NIM
-# ==========================================
-def get_seed_from_nim(nim_string):
-    """Mengekstrak angka dari NIM untuk dijadikan seed Numpy"""
-    numbers = re.sub(r'\D', '', str(nim_string))
-    if numbers:
-        # Memastikan seed masuk dalam batas integer 32-bit yang diterima numpy
-        return int(numbers) % (2**32 - 1)
-    return 42 # Default seed jika NIM kosong/tidak valid
+# --- DATA INITIALIZATION & GROUND TRUTH (Hidden dari Mahasiswa) ---
+data = {
+    'ID': ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'],
+    'X1': [2, 3, 2, 8, 9, 8, 1, 9],
+    'X2': [3, 3, 2, 7, 8, 9, 2, 9],
+    'X3': [2, 2, 1, 8, 7, 8, 1, 8],
+    'X4': [1, 2, 1, 9, 8, 8, 2, 9]
+}
+df = pd.DataFrame(data)
+X = df[['X1', 'X2', 'X3', 'X4']].values
 
-st.sidebar.title("Data Mahasiswa")
-nim_input = st.sidebar.text_input("Masukkan NIM Anda:", "12345678")
-student_seed = get_seed_from_nim(nim_input)
+# Ground Truth Iterasi 1
+c1_init, c2_init = X[0], X[3]
+true_d1, true_d2, true_cluster = [], [], []
 
-st.sidebar.markdown("---")
-st.sidebar.title("Modul Regresi")
-modul = st.sidebar.radio("Pilih Modul Pembelajaran:", 
-                         ["1. Univariate Visualizer", "2. Matrix Engine (Multivariate)", "3. Logistic Explorer"])
+for i in range(len(X)):
+    d1 = np.sqrt(np.sum((X[i] - c1_init) ** 2))
+    d2 = np.sqrt(np.sum((X[i] - c2_init) ** 2))
+    true_d1.append(d1)
+    true_d2.append(d2)
+    true_cluster.append(1 if d1 < d2 else 2)
 
-# Main Title
-st.title("Interactive Machine Learning Worksheet")
-st.caption(f"Dataset dikunci menggunakan Seed NIM: {nim_input}")
+# Ground Truth Centroid Baru Iterasi 1
+true_new_c1 = np.mean(X[np.array(true_cluster) == 1], axis=0)
+true_new_c2 = np.mean(X[np.array(true_cluster) == 2], axis=0)
 
-# ==========================================
-# MODUL 1: Univariate Visualizer
-# ==========================================
-if modul == "1. Univariate Visualizer":
-    st.header("Modul 1: Univariate Linear Regression")
-    
-    # Generate Data Unique to NIM
-    np.random.seed(student_seed)
-    # Trik Pedagogis: X dibuat tetap dan simetris agar rata-rata X bulat (6) dan varians bulat (40)
-    # Ini sangat memudahkan perhitungan manual mahasiswa di atas kertas.
-    X = np.array([2, 4, 6, 8, 10]) 
-    
-    # Y digenerate acak berdasarkan NIM, berupa integer
-    noise = np.random.randint(-15, 16, 5)
-    w_true = np.random.randint(3, 8)
-    a_true = np.random.randint(20, 40)
-    y = w_true * X + a_true + noise
-    y = np.clip(y, 10, 100) # Pastikan nilai ujian masuk akal (10-100)
-    
-    st.info("👇 **SALIN DATA INI KE LKS ANDA (BAGIAN 1)** 👇")
-    df_univ = pd.DataFrame({"Jam Belajar (X)": X, "Nilai Ujian (Y)": y})
-    # Tampilkan tabel secara horizontal agar hemat tempat
-    st.dataframe(df_univ.T)
-    
-    st.markdown("---")
-    st.write("Setelah menghitung manual, masukkan nilai bobot (w) dan bias (a) Anda di bawah ini untuk melihat garis *Best Fit* dan nilai Error.")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.subheader("Input Parameter Manual")
-        w_input = st.number_input("Masukkan nilai bobot (w):", value=0.00, step=0.10)
-        a_input = st.number_input("Masukkan nilai bias (a):", value=0.00, step=1.00)
-        
-        # Calculate Pred and SSE
-        y_pred = w_input * X + a_input
-        sse = np.sum((y - y_pred)**2)
-        
-        st.metric(label="Sum Square Error (SSE)", value=round(sse, 2))
-        if w_input == 0 and a_input == 0:
-            st.warning("Masukkan nilai w dan a hasil hitungan Anda.")
-        else:
-            st.success("Bandingkan nilai SSE ini. Cobalah ubah angka w dan a sedikit saja, apakah SSE membesar?")
+# Ground Truth Silhouette P1
+p1_coords = X[0]
+a1 = np.mean([np.sqrt(np.sum((p1_coords - X[idx]) ** 2)) for idx in [1, 2, 6]])
+b1 = np.mean([np.sqrt(np.sum((p1_coords - X[idx]) ** 2)) for idx in [3, 4, 5, 7]])
+true_s1 = (b1 - a1) / max(a1, b1)
 
-    with col2:
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.scatter(X, y, color='blue', s=100, label='Data Aktual')
-        
-        # Plot garis
-        x_line = np.linspace(0, 12, 100)
-        y_line = w_input * x_line + a_input
-        ax.plot(x_line, y_line, color='orange', linewidth=2, label=f'Model: y = {w_input:.2f}x + {a_input:.2f}')
-        
-        # Plot error lines (residuals)
-        for i in range(len(X)):
-            ax.plot([X[i], X[i]], [y[i], y_pred[i]], color='red', linestyle='--', alpha=0.5)
-            
-        ax.set_xlabel('Jam Belajar')
-        ax.set_ylabel('Nilai Ujian')
-        ax.set_xlim(0, 12)
-        ax.set_ylim(0, 110)
-        ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.6)
-        st.pyplot(fig)
+# --- UI APLIKASI ---
 
-# ==========================================
-# MODUL 2: Matrix Engine (Multivariate)
-# ==========================================
-elif modul == "2. Matrix Engine (Multivariate)":
-    st.header("Modul 2: Linear Regression Matrix Engine")
-    
-    # Generate Data Unique to NIM
-    np.random.seed(student_seed + 1) # +1 agar beda dari modul 1
-    X1 = np.random.choice(range(2, 10), 3, replace=False)
-    X2 = np.random.randint(1, 6, 3)
-    Y_multi = (3 * X1) + (4 * X2) + np.random.randint(20, 40, 3)
-    
-    st.info("👇 **SALIN DATA INI KE LKS ANDA (BAGIAN 2)** 👇")
-    df_multi = pd.DataFrame({
-        "Jam Belajar (X1)": X1, 
-        "Jumlah Latihan Soal (X2)": X2, 
-        "Nilai Ujian (Y)": Y_multi
+st.header("1. Data Pelanggan")
+st.dataframe(df, use_container_width=True)
+
+st.divider()
+
+# --- BAGIAN 1: VALIDASI TABEL JARAK ---
+st.header("2. Validasi Jarak & Klaster (Iterasi 1)")
+st.markdown("Isi nilai jarak (bulatkan 2 angka di belakang koma) dan pilihan klaster (1 atau 2).")
+
+# Setup Data Editor
+if 'user_df' not in st.session_state:
+    st.session_state.user_df = pd.DataFrame({
+        'ID': df['ID'],
+        'Jarak ke C1': [0.0] * 8,
+        'Jarak ke C2': [0.0] * 8,
+        'Klaster Terpilih': [0] * 8
     })
-    st.table(df_multi)
-    
-    st.markdown("---")
-    st.write("Susun Matriks X (jangan lupa kolom angka 1 untuk bias) dan Vektor Y di kertas Anda, lalu ketikkan ke dalam form di bawah ini.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Matriks X")
-        st.caption("Contoh format baris pertama: 1, 4, 2")
-        X_str = st.text_area("Input Matriks X (Gunakan koma sebagai pemisah):", height=120)
-        
-    with col2:
-        st.subheader("Vektor Y")
-        st.caption("Contoh: 75")
-        y_str = st.text_area("Input Vektor Y:", height=120)
-        
-    if st.button("Hitung Invers & Bobot Matriks", type="primary"):
-        if not X_str or not y_str:
-            st.error("Harap isi kedua matriks terlebih dahulu!")
-        else:
-            try:
-                # Parse inputs
-                X_mat = np.array([list(map(float, row.split(','))) for row in X_str.strip().split('\n')])
-                y_vec = np.array([[float(val)] for val in y_str.strip().split('\n')])
-                
-                st.write("---")
-                st.subheader("Langkah-langkah Komputasi Matriks:")
-                
-                # Step 1: X^T
-                X_T = X_mat.T
-                st.write("**1. Transpose Matriks ($X^T$):**")
-                st.write(np.round(X_T, 4))
-                
-                # Step 2: X^T * X
-                XTX = np.dot(X_T, X_mat)
-                st.write("**2. Perkalian ($X^T X$):**")
-                st.write(np.round(XTX, 4))
-                
-                # Step 3: Invers (X^T * X)^-1
-                XTX_inv = np.linalg.inv(XTX)
-                st.write("**3. Matriks Invers $(X^T X)^{-1}$:**")
-                st.write(np.round(XTX_inv, 4))
-                
-                # Step 4: Final weights
-                XTy = np.dot(X_T, y_vec)
-                w = np.dot(XTX_inv, XTy)
-                
-                st.success("**4. Hasil Akhir Vektor Bobot (w):**")
-                st.write(np.round(w, 4))
-                st.info("Salin nilai w ini ke LKS Anda untuk memprediksi data testing secara manual!")
-                
-            except Exception as e:
-                st.error("Terjadi kesalahan format input. Pastikan Anda hanya menggunakan angka dan koma, serta baris X dan Y sejajar jumlahnya.")
 
-# ==========================================
-# MODUL 3: Logistic Explorer
-# ==========================================
-elif modul == "3. Logistic Explorer":
-    st.header("Modul 3: Logistic Regression Explorer")
-    
-    # Generate Data Unique to NIM
-    np.random.seed(student_seed + 2)
-    # Generate 10 random hours between 1 and 15
-    X_log = np.sort(np.random.choice(range(1, 16), 10, replace=False))
-    
-    # Generate 0s and 1s with a random threshold based on NIM
-    random_threshold = np.random.randint(6, 10)
-    # Give some random overlaps so it's not a perfectly clean cut
-    y_log = np.where(X_log + np.random.randint(-2, 3, 10) >= random_threshold, 1, 0)
-    
-    st.info("👇 **DATA AKTUAL ANDA (Tergambar Otomatis di Plot)** 👇")
-    df_log = pd.DataFrame({"Jam Belajar (X)": X_log, "Status Lulus (Y)": y_log})
-    st.dataframe(df_log.T)
-    
-    st.markdown("---")
-    st.write("Eksplorasi secara visual bagaimana parameter $w$ dan $a$ mengubah bentuk kurva Sigmoid. Geser slider hingga **Cost (Log Loss)** sekecil mungkin.")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.subheader("Parameter Tuning")
-        w_log = st.slider("Bobot (w)", min_value=-3.0, max_value=3.0, value=0.0, step=0.1)
-        a_log = st.slider("Bias (a)", min_value=-15.0, max_value=15.0, value=0.0, step=0.5)
-        
-        # Calculate probabilities and Cost
-        v = w_log * X_log + a_log
-        preds = 1 / (1 + np.exp(-v))
-        
-        # Log Loss calculation (Cost function)
-        epsilon = 1e-15 # prevent log(0)
-        preds_clipped = np.clip(preds, epsilon, 1 - epsilon)
-        cost = -np.mean(y_log * np.log(preds_clipped) + (1 - y_log) * np.log(1 - preds_clipped))
-        
-        st.metric(label="Cost (Log Loss)", value=round(cost, 4))
-        
-        if cost < 0.4:
-            st.success("Tepat Sekali! Kurva pemisah sudah cukup optimal. Salin nilai w dan a ini ke LKS Anda.")
-        
-    with col2:
-        fig2, ax2 = plt.subplots(figsize=(8, 5))
-        
-        # Plot scatter data
-        # Warna dibedakan antara lulus dan tidak
-        colors = ['red' if y == 0 else 'blue' for y in y_log]
-        ax2.scatter(X_log, y_log, color=colors, s=150, edgecolor='black', zorder=5)
-        
-        # Plot sigmoid curve
-        x_curve = np.linspace(0, 16, 200)
-        v_curve = w_log * x_curve + a_log
-        y_curve = 1 / (1 + np.exp(-v_curve))
-        
-        ax2.plot(x_curve, y_curve, color='green', linewidth=3, label=f'Sigmoid')
-        
-        # Threshold line
-        ax2.axhline(y=0.5, color='gray', linestyle='--', alpha=0.7, label='Threshold (0.5)')
-        
-        ax2.set_xlabel('Jam Belajar')
-        ax2.set_ylabel('Probabilitas Lulus')
-        ax2.set_xlim(0, 16)
-        ax2.set_ylim(-0.1, 1.1)
-        ax2.set_yticks([0, 0.5, 1])
-        ax2.set_yticklabels(['0 (Gagal)', '0.5', '1 (Lulus)'])
-        ax2.legend(loc='center right')
-        ax2.grid(True, linestyle='--', alpha=0.4)
-        st.pyplot(fig2)
+edited_df = st.data_editor(
+    st.session_state.user_df, 
+    disabled=["ID"], 
+    use_container_width=True,
+    key="editor_it1"
+)
 
-# ==========================================
-# FOOTER / CREDIT
-# ==========================================
-st.markdown("---")
-st.caption("Developed by Farrel")
+if st.button("Validasi Tabel Iterasi 1", type="primary"):
+    errors = []
+    for i in range(8):
+        user_d1 = edited_df.at[i, 'Jarak ke C1']
+        user_d2 = edited_df.at[i, 'Jarak ke C2']
+        user_c = edited_df.at[i, 'Klaster Terpilih']
+        
+        # Validasi Jarak C1 (Toleransi 0.05 untuk pembulatan)
+        if not np.isclose(user_d1, true_d1[i], atol=0.02):
+            errors.append(f"❌ **{df['ID'][i]}**: 'Jarak ke C1' salah. Cek kembali perhitungan Euclidean-nya.")
+        
+        # Validasi Jarak C2
+        if not np.isclose(user_d2, true_d2[i], atol=0.02):
+            errors.append(f"❌ **{df['ID'][i]}**: 'Jarak ke C2' salah.")
+            
+        # Validasi Penentuan Klaster
+        if user_c not in [1, 2]:
+            errors.append(f"❌ **{df['ID'][i]}**: 'Klaster Terpilih' harus diisi 1 atau 2.")
+        elif user_c != true_cluster[i]:
+            errors.append(f"❌ **{df['ID'][i]}**: 'Klaster Terpilih' salah. Ingat, pilih klaster dengan jarak terdekat!")
+
+    if len(errors) == 0:
+        st.success("🎉 Luar biasa! Semua perhitungan jarak dan penentuan klaster di Iterasi 1 sudah BENAR.")
+    else:
+        st.error("Masih ada perhitungan yang kurang tepat. Silakan perbaiki bagian berikut:")
+        for err in errors:
+            st.markdown(err)
+
+st.divider()
+
+# --- BAGIAN 2: VALIDASI CENTROID BARU ---
+st.header("3. Validasi Centroid Baru (Setelah Iterasi 1)")
+st.markdown("Masukkan koordinat rata-rata untuk centroid baru.")
+
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("Centroid 1 Baru")
+    c1_x1 = st.number_input("X1 (C1)", value=0.0, step=0.1)
+    c1_x2 = st.number_input("X2 (C1)", value=0.0, step=0.1)
+    c1_x3 = st.number_input("X3 (C1)", value=0.0, step=0.1)
+    c1_x4 = st.number_input("X4 (C1)", value=0.0, step=0.1)
+
+with col2:
+    st.subheader("Centroid 2 Baru")
+    c2_x1 = st.number_input("X1 (C2)", value=0.0, step=0.1)
+    c2_x2 = st.number_input("X2 (C2)", value=0.0, step=0.1)
+    c2_x3 = st.number_input("X3 (C2)", value=0.0, step=0.1)
+    c2_x4 = st.number_input("X4 (C2)", value=0.0, step=0.1)
+
+if st.button("Validasi Centroid Baru"):
+    user_c1 = np.array([c1_x1, c1_x2, c1_x3, c1_x4])
+    user_c2 = np.array([c2_x1, c2_x2, c2_x3, c2_x4])
+    
+    c1_correct = np.allclose(user_c1, true_new_c1, atol=0.02)
+    c2_correct = np.allclose(user_c2, true_new_c2, atol=0.02)
+    
+    if c1_correct and c2_correct:
+        st.success("🎉 Tepat sekali! Titik centroid baru Anda sudah sesuai.")
+    else:
+        if not c1_correct:
+            st.error("❌ **Centroid 1 Baru** masih salah. Pastikan Anda hanya merata-ratakan X1, X2, X3, X4 dari anggota yang masuk ke Klaster 1.")
+        if not c2_correct:
+            st.error("❌ **Centroid 2 Baru** masih salah. Cek kembali rata-rata atribut anggota Klaster 2.")
+
+st.divider()
+
+# --- BAGIAN 3: VALIDASI SILHOUETTE ---
+st.header("4. Validasi Silhouette Coefficient (Titik P1)")
+st.markdown("Masukkan hasil perhitungan komponen Silhouette untuk titik P1. (Gunakan 2 angka di belakang koma)")
+
+col_a, col_b, col_s = st.columns(3)
+with col_a:
+    user_a1 = st.number_input("Nilai Kohesi (a1)", value=0.00, step=0.01)
+with col_b:
+    user_b1 = st.number_input("Nilai Separasi (b1)", value=0.00, step=0.01)
+with col_s:
+    user_s1 = st.number_input("Nilai Silhouette (s1)", value=0.00, step=0.01)
+
+if st.button("Validasi Silhouette"):
+    err_sil = []
+    if not np.isclose(user_a1, a1, atol=0.02):
+        err_sil.append("❌ **Nilai a1 salah.** Pastikan Anda merata-ratakan jarak P1 ke P2, P3, dan P7 saja.")
+    if not np.isclose(user_b1, b1, atol=0.02):
+        err_sil.append("❌ **Nilai b1 salah.** Cek rata-rata jarak P1 ke P4, P5, P6, dan P8.")
+    if not np.isclose(user_s1, true_s1, atol=0.02):
+        err_sil.append(f"❌ **Nilai s1 salah.** Rumusnya adalah (b1 - a1) / max(a1, b1).")
+        
+    if len(err_sil) == 0:
+        st.success("🎉 Sempurna! Pemahaman Anda tentang evaluasi klaster dengan Silhouette Coefficient sudah mantap.")
+    else:
+        st.error("Terdapat kesalahan pada perhitungan Silhouette:")
+        for err in err_sil:
+            st.markdown(err)
